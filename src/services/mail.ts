@@ -20,6 +20,8 @@ export interface SendMailOptions {
   text?: string;
   html?: string;
   replyTo?: string;
+  fromName?: string;  // 自定义发件人显示名称
+  fromEmail?: string; // 自定义发件人邮箱（显示用，实际由系统邮箱代发）
 }
 
 export interface SendMailResult {
@@ -85,13 +87,25 @@ export class MailService {
 
       const transporter = this.createTransporter(mxHost);
 
+      // 发件人显示名称和邮箱（可自定义）
+      const displayName = options.fromName || this.config.fromName;
+      const displayEmail = options.fromEmail || this.config.fromEmail;
+
       const result = await transporter.sendMail({
-        from: `"${this.config.fromName}" <${this.config.fromEmail}>`,
+        // envelope: 实际 SMTP 发送使用的地址（用于 SPF/DKIM 验证）
+        envelope: {
+          from: this.config.fromEmail,
+          to: Array.isArray(options.to) ? options.to : [options.to],
+        },
+        // from: 邮件头显示的发件人（收件人看到的）
+        from: `"${displayName}" <${displayEmail}>`,
+        // sender: 代发标识
+        sender: this.config.fromEmail,
         to: Array.isArray(options.to) ? options.to.join(", ") : options.to,
         subject: options.subject,
         text: options.text,
         html: options.html,
-        replyTo: options.replyTo,
+        replyTo: options.replyTo || displayEmail,
         headers: {
           "X-Mailer": "Bun Mail Server/1.0",
         },

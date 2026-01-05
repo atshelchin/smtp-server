@@ -12,6 +12,8 @@ const sendMailSchema = t.Object({
   text: t.Optional(t.String()),
   html: t.Optional(t.String()),
   replyTo: t.Optional(t.String()),
+  fromName: t.Optional(t.String()),  // 自定义发件人名称
+  fromEmail: t.Optional(t.String()), // 自定义发件人邮箱（显示用）
 });
 
 const sendBatchSchema = t.Object({
