@@ -1,0 +1,9 @@
+{
+  "port": 3000,
+  "apiKey": "your-secret-api-key-change-me",
+  "domain": "yourdomain.com",
+  "fromName": "Mail Service",
+  "fromEmail": "noreply@yourdomain.com",
+  "dkimSelector": "mail",
+  "dkimPrivateKey": ""
+}
