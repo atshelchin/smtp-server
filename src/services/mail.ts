@@ -1,9 +1,10 @@
 /**
  * 邮件发送服务
- * 封装 nodemailer，提供简洁的邮件发送接口
+ * 直接发送到目标邮件服务器（通过 MX 记录），支持 DKIM 签名
  */
 
 import { createTransport, type Transporter } from "nodemailer";
+import { Resolver } from "dns/promises";
 
 export interface MailConfig {
   domain: string;
@@ -30,20 +31,41 @@ export interface SendMailResult {
 }
 
 export class MailService {
-  private transporter: Transporter;
   private config: MailConfig;
+  private resolver: Resolver;
 
   constructor(config: MailConfig) {
     this.config = config;
-    this.transporter = this.createTransporter();
+    this.resolver = new Resolver();
   }
 
-  private createTransporter(): Transporter {
+  /**
+   * 获取目标域名的 MX 服务器
+   */
+  private async getMxHost(email: string): Promise<string> {
+    const domain = email.split("@")[1];
+    try {
+      const mxRecords = await this.resolver.resolveMx(domain);
+      // 按优先级排序，取最优先的
+      mxRecords.sort((a, b) => a.priority - b.priority);
+      return mxRecords[0].exchange;
+    } catch {
+      // 如果没有 MX 记录，尝试直接使用域名
+      return domain;
+    }
+  }
+
+  /**
+   * 创建针对特定目标服务器的 transporter
+   */
+  private createTransporter(mxHost: string): Transporter {
     return createTransport({
-      host: "localhost",
+      host: mxHost,
       port: 25,
       secure: false,
-      direct: true,
+      tls: {
+        rejectUnauthorized: false,
+      },
       dkim: {
         domainName: this.config.domain,
         keySelector: this.config.dkimSelector,
@@ -57,7 +79,13 @@ export class MailService {
    */
   async send(options: SendMailOptions): Promise<SendMailResult> {
     try {
-      const result = await this.transporter.sendMail({
+      // 获取第一个收件人的 MX 服务器
+      const toEmail = Array.isArray(options.to) ? options.to[0] : options.to;
+      const mxHost = await this.getMxHost(toEmail);
+
+      const transporter = this.createTransporter(mxHost);
+
+      const result = await transporter.sendMail({
         from: `"${this.config.fromName}" <${this.config.fromEmail}>`,
         to: Array.isArray(options.to) ? options.to.join(", ") : options.to,
         subject: options.subject,
