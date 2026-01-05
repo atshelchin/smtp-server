@@ -1,0 +1,99 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/smtp-server
+
+            # Create .env file
+            cat > .env <<EOF
+            PORT=${{ secrets.PORT }}
+            API_KEY=${{ secrets.API_KEY }}
+            MAIL_DOMAIN=${{ secrets.MAIL_DOMAIN }}
+            FROM_NAME=${{ secrets.FROM_NAME }}
+            FROM_EMAIL=${{ secrets.FROM_EMAIL }}
+            DKIM_SELECTOR=${{ secrets.DKIM_SELECTOR }}
+            DKIM_PRIVATE_KEY=${{ secrets.DKIM_PRIVATE_KEY }}
+            EOF
+
+            # Create docker-compose.yml
+            cat > docker-compose.yml <<'EOF'
+            services:
+              smtp-server:
+                image: ghcr.io/${{ github.repository }}:latest
+                container_name: smtp-server
+                restart: always
+                ports:
+                  - "${PORT:-3000}:3000"
+                env_file:
+                  - .env
+                healthcheck:
+                  test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+            EOF
+
+            # Login to GitHub Container Registry
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull and restart
+            docker compose pull
+            docker compose up -d
+
+            # Show status
+            docker compose ps

@@ -18,6 +18,9 @@
 # misc
 .DS_Store
 *.pem
+config.json
+dkim-private.pem
+dkim-public.pem
 
 # debug
 npm-debug.log*
@@ -26,6 +29,7 @@ yarn-error.log*
 
 # local env files
 .env.local
+.env
 .env.development.local
 .env.test.local
 .env.production.local

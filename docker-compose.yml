@@ -1,0 +1,20 @@
+services:
+  smtp-server:
+    build: .
+    container_name: smtp-server
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=${PORT:-3000}
+      - API_KEY=${API_KEY}
+      - MAIL_DOMAIN=${MAIL_DOMAIN}
+      - FROM_NAME=${FROM_NAME:-Mail Service}
+      - FROM_EMAIL=${FROM_EMAIL}
+      - DKIM_SELECTOR=${DKIM_SELECTOR:-mail}
+      - DKIM_PRIVATE_KEY=${DKIM_PRIVATE_KEY}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
